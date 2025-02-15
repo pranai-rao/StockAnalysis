@@ -1,0 +1,7 @@
+dash==2.18.2
+pandas
+numpy
+talib
+pandas
+yfinance
+plotly
