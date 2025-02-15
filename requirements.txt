@@ -1,7 +1,7 @@
 dash==2.18.2
 pandas
 numpy
-talib
+TA-Lib
 pandas
 yfinance
 plotly
