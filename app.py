@@ -8,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 
 stocks = pd.read_csv('stock_list.csv')
 app = Dash()
+server = app.server
 
 app.layout = [
     html.H1(children='Stock Analysis', style={'textAlign':'center'}),
