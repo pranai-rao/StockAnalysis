@@ -1,7 +1,4 @@
-dash==2.18.2
-pandas
-numpy
-TA-Lib
-pandas
+dash
 yfinance
 plotly
+pandas

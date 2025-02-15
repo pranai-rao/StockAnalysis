@@ -1,21 +1,13 @@
 # Read stocks
 import yfinance as yf
-
-# For plotting
 import plotly.graph_objects as go
-
-# To calculate TAs
-import talib as ta
-from talib import MA_Type
-
-
 import pandas as pd
 from dash import Dash, html, dcc, callback, Output, Input
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 stocks = pd.read_csv('stock_list.csv')
-
 app = Dash()
-server = app.server
 
 app.layout = [
     html.H1(children='Stock Analysis', style={'textAlign':'center'}),
@@ -29,7 +21,12 @@ app.layout = [
 )
 def update_graph(value):
     df = yf.Ticker(value).history(start='2024-02-01')[['Open', 'Close', 'Volume', 'High', 'Low']]
-    df['BU'], df['BM'], df['BL'] = ta.BBANDS(df.Close, timeperiod=20, matype=MA_Type.EMA)
+
+    # Getting the bollinger values
+    df['BM'] = df['Close'].rolling(window=20).mean()
+    df['SD'] = df['Close'].rolling(window=20).std()
+    df['BU'] = df['BM'] + 2 * df['SD']
+    df['BL'] = df['BM'] - 2 * df['SD']
 
     # Create a Date column
     df['Date'] = df.index
@@ -83,7 +80,8 @@ def update_graph(value):
             rangeslider=dict(
                 visible=True
             ),
-            type="date"
+            type="date",
+            range=[(datetime.today() - relativedelta(months=6)).strftime('%Y-%m-%d'), datetime.today().strftime('%Y-%m-%d')]
         )
     )
 
