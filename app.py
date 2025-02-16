@@ -1,4 +1,5 @@
 # Read stocks
+import dash
 import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
@@ -7,6 +8,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 stocks = pd.read_csv('stock_list.csv')
+
 app = Dash()
 server = app.server
 
@@ -18,71 +20,70 @@ app.layout = [
 
 @callback(
     Output('graph-content', 'figure'),
-    Input('dropdown-selection', 'value')
+    [Input('dropdown-selection', 'value'),
+     Input('graph-content', 'relayoutData')]
 )
-def update_graph(value):
-    df = yf.Ticker(value).history(start='2024-02-01')[['Open', 'Close', 'Volume', 'High', 'Low']]
+def update_graph(value, relayoutData):
+    # Fetch 2+ years of data to support the "All" selector
+    df = yf.Ticker(value).history(period="5y")[['Open', 'Close', 'Volume', 'High', 'Low']]
 
-    # Getting the bollinger values
+    # Compute Bollinger Bands
     df['BM'] = df['Close'].rolling(window=20).mean()
     df['SD'] = df['Close'].rolling(window=20).std()
     df['BU'] = df['BM'] + 2 * df['SD']
     df['BL'] = df['BM'] - 2 * df['SD']
 
-    # Create a Date column
+    # Convert index to column
     df['Date'] = df.index
-    # Drop the Date as index
     df.reset_index(drop=True, inplace=True)
-    df.head(5)
 
-    fig = go.Figure(layout=go.Layout(template='plotly_white', title=value + " – " + stocks[stocks['Symbol'] == value]['Company'].values[0], height=500, legend_title='Legend'))
+    # Create figure
+    fig = go.Figure(layout=go.Layout(template='plotly_white', title=value, height=500))
 
     fig.add_trace(go.Candlestick(x=df['Date'], open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], showlegend=False))
-    # fig.add_trace(go.Scatter(x=df['Date'], y=df['Close'], mode='lines', name='Price', line=dict(color='#79bc77')))
-    fig.add_trace(go.Scatter(x=df['Date'], y=df['BU'], mode='lines', name='Upper', line=dict(color='#9999ff')))
-    fig.add_trace(go.Scatter(x=df['Date'], y=df['BM'], mode='lines', name='SMA', line=dict(color='#000000')))
-    fig.add_trace(go.Scatter(x=df['Date'], y=df['BL'], mode='lines', name='Lower', line=dict(color='#9999ff')))
+    fig.add_trace(go.Scatter(x=df['Date'], y=df['BU'], mode='lines', name='Upper Band', line=dict(color='#9999ff')))
+    fig.add_trace(go.Scatter(x=df['Date'], y=df['BM'], mode='lines', name='SMA', line=dict(color='#000000')))  #, visible='legendonly'))  # Can be toggled in legend
+    fig.add_trace(go.Scatter(x=df['Date'], y=df['BL'], mode='lines', name='Lower Band', line=dict(color='#9999ff')))
 
-    fig.update_yaxes(title_text='Price')
-    fig.update_xaxes(title_text='Date')
+    # Handle x-axis range correctly
+    if relayoutData and ('xaxis.range' in relayoutData or 'xaxis.range[0]' in relayoutData):
+        x_start, x_end = relayoutData.get('xaxis.range', [None, None])
+        if x_start is None or x_end is None:
+            x_start = relayoutData.get('xaxis.range[0]', df['Date'].min())
+            x_end = relayoutData.get('xaxis.range[1]', df['Date'].max())
+    else:
+        # Default **only on first load** (not on button clicks)
+        x_end = df['Date'].max()
+        x_start = x_end - relativedelta(months=6)
 
-    set_padding(fig)
+    # Ensure x_start and x_end are strings for comparison
+    x_start, x_end = str(x_start), str(x_end)
 
-    # Remove dates without values
-    fig.update_xaxes(rangebreaks=[dict(values=[d for d in pd.date_range(start=df.index[0],end=df.index[-1]).strftime("%Y-%m-%d").tolist() if not d in [d.strftime("%Y-%m-%d") for d in pd.to_datetime(df.index)]])])
+    # Filter data based on x-axis range
+    filtered_df = df[(df['Date'] >= x_start) & (df['Date'] <= x_end)]
 
+    # Adjust y-axis range based on Bollinger Bands
+    if not filtered_df.empty:
+        y_min = filtered_df['BL'].min() - 5
+        y_max = filtered_df['BU'].max() + 5
+        fig.update_yaxes(range=[y_min, y_max])
+
+    # Set correct x-axis range
     fig.update_layout(
         xaxis=dict(
             rangeselector=dict(
                 buttons=list([
-                    dict(count=1,
-                         label="1m",
-                         step="month",
-                         stepmode="backward"),
-                    dict(count=3,
-                         label="3m",
-                         step="month",
-                         stepmode="backward"),
-                    dict(count=6,
-                         label="6m",
-                         step="month",
-                         stepmode="backward"),
-                    dict(count=1,
-                         label="YTD",
-                         step="year",
-                         stepmode="todate"),
-                    dict(count=1,
-                         label="1y",
-                         step="year",
-                         stepmode="backward"),
-                    dict(step="all")
+                    dict(count=1, label="1m", step="month", stepmode="backward"),
+                    dict(count=3, label="3m", step="month", stepmode="backward"),
+                    dict(count=6, label="6m", step="month", stepmode="backward"),
+                    dict(count=1, label="YTD", step="year", stepmode="todate"),
+                    dict(count=1, label="1y", step="year", stepmode="backward"),
+                    dict(count=5, label="5y", step="year", stepmode="backward")  # This should now properly extend to all available data
                 ])
             ),
-            rangeslider=dict(
-                visible=True
-            ),
+            rangeslider=dict(visible=True),
             type="date",
-            range=[(datetime.today() - relativedelta(months=6)).strftime('%Y-%m-%d'), datetime.today().strftime('%Y-%m-%d')]
+            range=[x_start, x_end]  # Dynamically adjust based on selection
         )
     )
 
@@ -90,8 +91,9 @@ def update_graph(value):
 
 
 def set_padding(fig):
-    fig.update_layout(margin=go.layout.Margin(r=10, b=10)) # right, bottom margin
+    fig.update_layout(margin=go.layout.Margin(r=10)) # right, bottom margin
 
 
 if __name__ == '__main__':
     app.run(debug=True)
+
