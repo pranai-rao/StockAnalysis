@@ -1,5 +1,6 @@
-dash
-yfinance
-plotly
-pandas
+dash~=2.18.2
+yfinance~=0.2.53
+plotly~=6.0.0
+pandas~=2.2.3
+python-dateutil~=2.9.0.post0
 gunicorn
