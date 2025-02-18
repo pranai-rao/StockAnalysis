@@ -16,16 +16,19 @@ def update_data():
     price = []
     volume = []
     analyst = []
+    tip = []
     profit = []
     percent_profit = []
     last_update = []
 
     for i, ticker in enumerate(df['Ticker']):
         info = yf.Ticker(ticker).info
-        if info['marketState'] == 'CLOSED':
-            current_price = info['regularMarketPrice']
-        else:
-            current_price = info['previousClose']
+        history = yf.download(ticker, period='5d')
+
+        current_price = history['Close'].iloc[-1][ticker]
+
+        previous_median = (history['High'].iloc[-2][ticker] + history['Low'].iloc[-2][ticker]) / 2
+        std = float(history['Close'].std().iloc[0])
 
         price.append(round(current_price, 2))
         purchase_price = df['Purchase Price'].iloc[i]
@@ -39,6 +42,12 @@ def update_data():
 
         volume.append(info.get('volume', None))
         analyst.append(info.get('averageAnalystRating', None))
+
+        if (current_price - previous_median) / std >= 0.75:
+            tip.append('Sell')
+        else:
+            tip.append('Keep')
+
         last_update.append(datetime.today().strftime('%Y-%m-%d'))
 
     df['Price'] = price
@@ -46,6 +55,7 @@ def update_data():
     df['Profit'] = profit
     df['Percent Profit'] = percent_profit
     df['Analyst Rating'] = analyst
+    df['Tip'] = tip
     df['Last Updated'] = last_update
 
     df.to_csv('pages/purchase_list.csv', sep=',', index=False, na_rep='NaN')
@@ -58,6 +68,7 @@ layout = [
         update_data().to_dict('records'),
         sort_action='native',
         sort_mode='multi',
+        cell_selectable=False,
         style_data_conditional=[
             {
                 'if' : {
@@ -111,7 +122,20 @@ layout = [
                     'column_id': 'Analyst Rating',
                 },
                 'backgroundColor': '#f4cccc'
-            }
+            },
+            {
+                'if': {
+                    'filter_query': '{Tip} contains "Sell"',
+                    'column_id': 'Tip',
+                },
+                'backgroundColor': '#d9ead3'
+            },  {
+                'if' : {
+                    'filter_query' : '{Tip} contains "Keep"',
+                    'column_id' : 'Tip',
+                },
+                'backgroundColor' : '#fff2cc'
+            },
         ]
     )
 ]
